@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="110" fill="#121212"/>
+  <rect width="512" height="512" rx="110" fill="url(#g)" opacity="0.35"/>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="512" y2="512">
+      <stop offset="0" stop-color="#00E5FF"/>
+      <stop offset="1" stop-color="#0891A8"/>
+    </linearGradient>
+  </defs>
+  <text x="50%" y="58%" font-size="260" text-anchor="middle" dominant-baseline="middle">🏋️</text>
+</svg>

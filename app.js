@@ -67,8 +67,7 @@ function renderAuth(mode = 'signin') {
   app.innerHTML = `
     <div class="auth-screen">
       <div class="auth-brand">
-        <div class="logo">🏋️</div>
-        <h1>Tamrino</h1>
+        <img src="logo.png" alt="Tamrino" class="brand-logo-img" />
         <p>برنامه تمرینت، دیگه رو کاغذ نه</p>
       </div>
       <div class="auth-card">
@@ -149,7 +148,8 @@ async function renderApp() {
   app.innerHTML = `
     <div class="top-bar">
       <div class="avatar avatar-sm" id="avatarBtn" title="پروفایل">${name[0]?.toUpperCase() ?? '🙂'}</div>
-      <strong>Tamrino</strong>
+      <img src="logo.png" alt="Tamrino" class="top-bar-logo" />
+      <button class="icon-btn" id="historyBtn" title="تاریخچه">🕘</button>
     </div>
     <div class="header">
       <div class="greeting">
@@ -162,6 +162,7 @@ async function renderApp() {
   document.getElementById('dateLabel').textContent = new Date().toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'long' });
 
   document.getElementById('avatarBtn').onclick = () => openProfileSheet(name);
+  document.getElementById('historyBtn').onclick = () => renderHistory();
 
   await loadToday();
 }
@@ -311,7 +312,10 @@ function renderToday(w) {
 
   content.innerHTML = `
     <div class="today-card">
-      <p class="eyebrow">تمرین امروز</p>
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <p class="eyebrow">تمرین امروز</p>
+        <button class="btn-ghost" id="editWorkoutBtn" style="padding:2px 6px">✏️ ویرایش برنامه</button>
+      </div>
       <div class="row-top">
         <div>
           <h3>${w.title}</h3>
@@ -340,8 +344,8 @@ function renderToday(w) {
       <div class="stat" data-field="calories">${ring(Math.min((w.calories||0)/5,100), 64, 'var(--danger)', w.calories ? toFaDigits(w.calories) : '−')}<span class="label">کالری</span></div>
     </div>
 
-    <div class="section-title"><h4>حرکات امروز</h4></div>
-    <div class="exercise-list">
+    <div class="section-title"><h4>حرکات امروز</h4>${!w.started_at ? '<span style="font-size:12px;color:var(--text-dim)">🔒 اول تمرین رو شروع کن</span>' : ''}</div>
+    <div class="exercise-list ${!w.started_at ? 'locked' : ''}">
       ${groupExercises(w.exercises).map(item => {
         if (item.type === 'single') {
           const e = item.ex;
@@ -384,6 +388,7 @@ function renderToday(w) {
   // checkbox toggles (works for both single exercises and grouped superset/triset cards)
   content.querySelectorAll('.exercise-item').forEach(el => {
     el.onclick = async () => {
+      if (!w.started_at) { toast('اول باید «شروع تمرین» رو بزنی 🔒'); return; }
       const ids = el.dataset.ids.split(',');
       const involved = w.exercises.filter(x => ids.includes(x.id));
       const newDone = !involved.every(x => x.done);
@@ -411,6 +416,8 @@ function renderToday(w) {
     await supabase.from('workouts').update({ started_at: new Date().toISOString() }).eq('id', w.id);
     loadToday();
   };
+
+  document.getElementById('editWorkoutBtn').onclick = () => renderEditWorkout(w);
 
   if (w.started_at && !w.finished_at) startTimerDisplay(w.started_at);
 
@@ -537,6 +544,210 @@ function renderBuilder(weekday) {
     if (exercises.length) await supabase.from('exercises').insert(exercises);
 
     toast('برنامه امروز ذخیره شد ✅');
+    loadToday();
+  };
+}
+
+// ---------------- HISTORY ----------------
+async function renderHistory() {
+  const content = document.getElementById('content');
+  content.innerHTML = `<div class="empty-state"><p>در حال بارگذاری...</p></div>`;
+
+  const { data: workouts } = await supabase
+    .from('workouts')
+    .select('*, exercises(*)')
+    .order('workout_date', { ascending: false });
+
+  content.innerHTML = `
+    <div class="section-title"><h4>تاریخچه‌ی تمرین‌ها</h4><button class="btn-ghost" id="backToToday">بازگشت به امروز</button></div>
+    <div class="exercise-list">
+      ${(workouts && workouts.length) ? workouts.map(w => {
+        const total = w.exercises.length;
+        const done = w.exercises.filter(e => e.done).length;
+        const pct = total ? Math.round((done / total) * 100) : 0;
+        const dateLabel = new Date(w.workout_date).toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'long' });
+        return `
+          <div class="exercise-item" data-id="${w.id}" style="cursor:pointer">
+            <div class="ex-icon">${w.finished_at ? '✅' : '📋'}</div>
+            <div class="ex-info">
+              <div class="name">${w.title}</div>
+              <div class="meta">${dateLabel} · ${toFaDigits(pct)}٪ تکمیل</div>
+            </div>
+          </div>`;
+      }).join('') : `<div class="empty-state"><p>هنوز تمرینی ثبت نشده</p></div>`}
+    </div>
+  `;
+
+  document.getElementById('backToToday').onclick = () => loadToday();
+  content.querySelectorAll('.exercise-item[data-id]').forEach(el => {
+    el.onclick = () => renderHistoryDetail(workouts.find(w => w.id === el.dataset.id));
+  });
+}
+
+function renderHistoryDetail(w) {
+  const content = document.getElementById('content');
+  const exercises = [...w.exercises].sort((a, b) => a.order_index - b.order_index);
+  const total = exercises.length;
+  const done = exercises.filter(e => e.done).length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const dateLabel = new Date(w.workout_date).toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  content.innerHTML = `
+    <div class="section-title"><h4>${dateLabel}</h4><button class="btn-ghost" id="backToHistory">بازگشت</button></div>
+    <div class="today-card">
+      <div class="row-top">
+        <div>
+          <h3>${w.title}</h3>
+          <div class="tags">
+            ${w.level ? `<span class="tag">${w.level}</span>` : ''}
+            ${w.duration_min ? `<span class="tag">${toFaDigits(w.duration_min)} دقیقه</span>` : ''}
+            <span class="tag">${toFaDigits(total)} حرکت</span>
+            ${w.gym_name ? `<span class="tag">${w.gym_name}</span>` : ''}
+          </div>
+        </div>
+        ${ring(pct, 76, 'var(--success)', toFaDigits(pct) + '٪', 'تکمیل')}
+      </div>
+    </div>
+    <div class="stats-row">
+      <div class="stat">${ring(Math.min((w.avg_heart_rate || 0) / 2, 100), 64, '#5DADE2', w.avg_heart_rate ? toFaDigits(w.avg_heart_rate) : '−')}<span class="label">ضربان میانگین</span></div>
+      <div class="stat">${ring(Math.min((w.active_minutes || 0), 100), 64, 'var(--accent)', w.active_minutes ? toFaDigits(w.active_minutes) : '−')}<span class="label">دقیقه فعال</span></div>
+      <div class="stat">${ring(Math.min((w.calories || 0) / 5, 100), 64, 'var(--danger)', w.calories ? toFaDigits(w.calories) : '−')}<span class="label">کالری</span></div>
+    </div>
+    <div class="section-title"><h4>حرکات</h4></div>
+    <div class="exercise-list">
+      ${groupExercises(exercises).map(item => {
+        if (item.type === 'single') {
+          const e = item.ex;
+          return `
+            <div class="exercise-item ${e.done ? 'done' : ''}" style="cursor:default">
+              <div class="check">✓</div>
+              <div class="ex-icon">${e.icon || '🏋️'}</div>
+              <div class="ex-info">
+                <div class="name">${e.name}</div>
+                <div class="meta">${e.sets ? toFaDigits(e.sets) + ' ست' : ''}${e.reps ? ' × ' + toFaDigits(e.reps) + ' تکرار' : ''}${e.weight_kg ? ' · ' + toFaDigits(e.weight_kg) + ' کیلوگرم' : ''}</div>
+              </div>
+            </div>`;
+        }
+        const allDone = item.exercises.every(e => e.done);
+        const label = item.exercises.length === 2 ? 'سوپرست' : item.exercises.length === 3 ? 'تری‌ست' : `گروه (${toFaDigits(item.exercises.length)} حرکت)`;
+        return `
+          <div class="exercise-item group-item ${allDone ? 'done' : ''}" style="cursor:default">
+            <div class="check">✓</div>
+            <div class="ex-icon">🔗</div>
+            <div class="ex-info">
+              <div class="group-label">${label}</div>
+              ${item.exercises.map(e => `
+                <div class="group-sub">
+                  <span class="name">${e.name}</span>
+                  <span class="meta">${e.sets ? toFaDigits(e.sets) + ' ست' : ''}${e.reps ? ' × ' + toFaDigits(e.reps) + ' تکرار' : ''}${e.weight_kg ? ' · ' + toFaDigits(e.weight_kg) + ' کیلوگرم' : ''}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  document.getElementById('backToHistory').onclick = () => renderHistory();
+}
+
+// ---------------- EDIT TODAY'S WORKOUT ----------------
+function renderEditWorkout(w) {
+  const content = document.getElementById('content');
+  exerciseRowCount = 0;
+  const existingExercises = [...w.exercises].sort((a, b) => a.order_index - b.order_index);
+
+  content.innerHTML = `
+    <div class="section-title"><h4>ویرایش برنامه‌ی امروز</h4><button class="btn-ghost" id="backToToday">بازگشت</button></div>
+    <div class="builder">
+      <div class="field"><label>عنوان روز</label><input class="input" id="b_title" value="${w.title ?? ''}" /></div>
+      <div class="grid2">
+        <div class="field"><label>سطح</label><input class="input" id="b_level" value="${w.level ?? ''}" /></div>
+        <div class="field"><label>مدت (دقیقه)</label><input class="input" id="b_duration" type="number" value="${w.duration_min ?? ''}" /></div>
+      </div>
+      <div class="field"><label>باشگاه</label><input class="input" id="b_gym" value="${w.gym_name ?? ''}" /></div>
+
+      <div class="section-title" style="padding:0"><h4>حرکات</h4><button class="btn-ghost" id="addRow">+ افزودن حرکت</button></div>
+      <div id="exRows"></div>
+
+      <button class="btn-primary" id="saveEdit" style="margin-top:8px">ذخیره تغییرات</button>
+    </div>
+  `;
+
+  document.getElementById('backToToday').onclick = () => loadToday();
+
+  const rowsEl = document.getElementById('exRows');
+  enableEnterNav(document.querySelector('.builder'), document.getElementById('saveEdit'));
+
+  const addRow = (prefill) => {
+    const idx = exerciseRowCount++;
+    rowsEl.insertAdjacentHTML('beforeend', exerciseRowHTML(idx));
+    const row = rowsEl.querySelector(`[data-row="${idx}"]`);
+    row.dataset.linked = 'false';
+    if (prefill) {
+      row.querySelector('[data-f="name"]').value = prefill.name ?? '';
+      row.querySelector('[data-f="sets"]').value = prefill.sets ?? '';
+      row.querySelector('[data-f="reps"]').value = prefill.reps ?? '';
+      row.querySelector('[data-f="weight_kg"]').value = prefill.weight_kg ?? '';
+    }
+    row.querySelector(`[data-remove="${idx}"]`).onclick = (e) => { e.target.closest('.ex-row').remove(); };
+    row.querySelector(`[data-link="${idx}"]`).onclick = (e) => {
+      const linked = row.dataset.linked === 'true';
+      row.dataset.linked = linked ? 'false' : 'true';
+      e.target.classList.toggle('active', !linked);
+      row.classList.toggle('linked', !linked);
+    };
+    return row;
+  };
+  document.getElementById('addRow').onclick = () => addRow();
+
+  if (existingExercises.length) {
+    existingExercises.forEach((ex, i) => {
+      const row = addRow(ex);
+      const next = existingExercises[i + 1];
+      if (ex.group_id && next && next.group_id === ex.group_id) {
+        row.dataset.linked = 'true';
+        row.classList.add('linked');
+        row.querySelector('.link-btn').classList.add('active');
+      }
+    });
+  } else {
+    addRow(); addRow();
+  }
+
+  document.getElementById('saveEdit').onclick = async () => {
+    const title = document.getElementById('b_title').value.trim();
+    if (!title) { toast('عنوان روز رو بنویس'); return; }
+
+    await supabase.from('workouts').update({
+      title,
+      level: document.getElementById('b_level').value.trim() || null,
+      duration_min: parseInt(document.getElementById('b_duration').value) || null,
+      gym_name: document.getElementById('b_gym').value.trim() || null,
+    }).eq('id', w.id);
+
+    await supabase.from('exercises').delete().eq('workout_id', w.id);
+
+    const rows = [...rowsEl.querySelectorAll('.ex-row')];
+    let currentGroup = null;
+    const exercises = rows.map((row, i) => {
+      if (currentGroup === null && row.dataset.linked === 'true') currentGroup = crypto.randomUUID();
+      const group_id = currentGroup;
+      if (row.dataset.linked !== 'true') currentGroup = null;
+      return {
+        workout_id: w.id,
+        name: row.querySelector('[data-f="name"]').value.trim(),
+        sets: parseInt(row.querySelector('[data-f="sets"]').value) || null,
+        reps: parseInt(row.querySelector('[data-f="reps"]').value) || null,
+        weight_kg: parseFloat(row.querySelector('[data-f="weight_kg"]').value) || null,
+        order_index: i,
+        group_id,
+      };
+    }).filter(e => e.name);
+
+    if (exercises.length) await supabase.from('exercises').insert(exercises);
+
+    toast('برنامه‌ی امروز به‌روزرسانی شد ✅');
     loadToday();
   };
 }
