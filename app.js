@@ -119,7 +119,7 @@ function renderNamePrompt() {
       <div class="auth-card">
         <div class="field">
           <label>اسم</label>
-          <input class="input" id="nameInput" placeholder="مثلاً آرش" />
+          <input class="input" id="nameInput" placeholder="مثلاً باربد" />
         </div>
         <p class="error-text" id="nameError"></p>
         <button class="btn-primary" id="nameSubmit">ثبت و ادامه</button>
@@ -155,16 +155,33 @@ async function renderApp() {
       <div class="greeting">
         <h2>سلام، ${name}</h2>
         <p id="dateLabel"></p>
+        <p id="programLabel" class="program-label"></p>
       </div>
     </div>
     <div id="content"></div>
   `;
   document.getElementById('dateLabel').textContent = new Date().toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const programLabel = programStatusLabel(user);
+  const programLabelEl = document.getElementById('programLabel');
+  if (programLabel) { programLabelEl.textContent = programLabel; } else { programLabelEl.remove(); }
 
   document.getElementById('avatarBtn').onclick = () => openProfileSheet(name);
   document.getElementById('historyBtn').onclick = () => renderHistory();
 
   await loadToday();
+}
+
+// Computes "هفته X از برنامه Y هفته‌ای" from the user's stored program settings.
+function programStatusLabel(user) {
+  const weeks = user.user_metadata?.program_weeks;
+  const start = user.user_metadata?.program_start_date;
+  if (!weeks || !start) return null;
+  const startDate = new Date(start + 'T00:00:00');
+  const today = new Date(todayISO() + 'T00:00:00');
+  const diffDays = Math.floor((today - startDate) / 86400000);
+  const currentWeek = Math.floor(diffDays / 7) + 1;
+  if (currentWeek < 1) return null;
+  return `هفته ${toFaDigits(currentWeek)} از برنامه‌ی ${toFaDigits(weeks)} هفته‌ای`;
 }
 
 // ---------------- PROFILE SHEET ----------------
@@ -186,6 +203,7 @@ function openProfileSheet(name) {
       </div>
       <div class="profile-row" id="rowEditName">✏️ ویرایش نام</div>
       <div class="profile-row" id="rowTemplates">🗂 قالب‌های هفتگی</div>
+      <div class="profile-row" id="rowProgram">📅 دوره‌ی برنامه</div>
       <div class="profile-row" id="rowLogout">⎋ خروج از حساب</div>
       <div class="profile-row danger" id="rowDelete">🗑 حذف حساب</div>
       <div class="profile-row" id="rowClose" style="color:var(--text-dim); justify-content:center">بستن</div>
@@ -211,6 +229,11 @@ function openProfileSheet(name) {
   document.getElementById('rowTemplates').onclick = () => {
     closeProfileSheet();
     renderTemplates();
+  };
+
+  document.getElementById('rowProgram').onclick = () => {
+    closeProfileSheet();
+    renderProgramSettings();
   };
 
   document.getElementById('rowDelete').onclick = async () => {
@@ -461,8 +484,34 @@ function exerciseRowHTML(idx) {
       <input class="input" placeholder="تکرار" type="number" data-f="reps" />
       <input class="input" placeholder="وزن" type="number" data-f="weight_kg" />
       <button class="link-btn" data-link="${idx}" title="پیوند به حرکت بعدی (سوپرست/تری‌ست)">🔗</button>
+      <div class="move-btns">
+        <button class="move-btn" data-move="up" title="جابه‌جایی به بالا">▲</button>
+        <button class="move-btn" data-move="down" title="جابه‌جایی به پایین">▼</button>
+      </div>
       <button class="remove-btn" data-remove="${idx}">✕</button>
     </div>`;
+}
+
+// Shared wiring for remove / link-to-next / reorder buttons on an exercise row.
+function wireExerciseRow(row, idx, rowsEl) {
+  if (row.dataset.linked === undefined) row.dataset.linked = 'false';
+  row.querySelector(`[data-remove="${idx}"]`).onclick = (e) => {
+    e.target.closest('.ex-row').remove();
+  };
+  row.querySelector(`[data-link="${idx}"]`).onclick = (e) => {
+    const linked = row.dataset.linked === 'true';
+    row.dataset.linked = linked ? 'false' : 'true';
+    e.target.classList.toggle('active', !linked);
+    row.classList.toggle('linked', !linked);
+  };
+  row.querySelector('[data-move="up"]').onclick = () => {
+    const prev = row.previousElementSibling;
+    if (prev) rowsEl.insertBefore(row, prev);
+  };
+  row.querySelector('[data-move="down"]').onclick = () => {
+    const next = row.nextElementSibling;
+    if (next) rowsEl.insertBefore(next, row);
+  };
 }
 
 function renderBuilder(weekday) {
@@ -495,16 +544,7 @@ function renderBuilder(weekday) {
     const idx = exerciseRowCount++;
     rowsEl.insertAdjacentHTML('beforeend', exerciseRowHTML(idx));
     const row = rowsEl.querySelector(`[data-row="${idx}"]`);
-    row.dataset.linked = 'false';
-    row.querySelector(`[data-remove="${idx}"]`).onclick = (e) => {
-      e.target.closest('.ex-row').remove();
-    };
-    row.querySelector(`[data-link="${idx}"]`).onclick = (e) => {
-      const linked = row.dataset.linked === 'true';
-      row.dataset.linked = linked ? 'false' : 'true';
-      e.target.classList.toggle('active', !linked);
-      row.classList.toggle('linked', !linked);
-    };
+    wireExerciseRow(row, idx, rowsEl);
   };
   document.getElementById('addRow').onclick = addRow;
   addRow(); addRow(); // start with 2 empty rows
@@ -683,20 +723,13 @@ function renderEditWorkout(w) {
     const idx = exerciseRowCount++;
     rowsEl.insertAdjacentHTML('beforeend', exerciseRowHTML(idx));
     const row = rowsEl.querySelector(`[data-row="${idx}"]`);
-    row.dataset.linked = 'false';
     if (prefill) {
       row.querySelector('[data-f="name"]').value = prefill.name ?? '';
       row.querySelector('[data-f="sets"]').value = prefill.sets ?? '';
       row.querySelector('[data-f="reps"]').value = prefill.reps ?? '';
       row.querySelector('[data-f="weight_kg"]').value = prefill.weight_kg ?? '';
     }
-    row.querySelector(`[data-remove="${idx}"]`).onclick = (e) => { e.target.closest('.ex-row').remove(); };
-    row.querySelector(`[data-link="${idx}"]`).onclick = (e) => {
-      const linked = row.dataset.linked === 'true';
-      row.dataset.linked = linked ? 'false' : 'true';
-      e.target.classList.toggle('active', !linked);
-      row.classList.toggle('linked', !linked);
-    };
+    wireExerciseRow(row, idx, rowsEl);
     return row;
   };
   document.getElementById('addRow').onclick = () => addRow();
@@ -749,6 +782,57 @@ function renderEditWorkout(w) {
 
     toast('برنامه‌ی امروز به‌روزرسانی شد ✅');
     loadToday();
+  };
+}
+
+// ---------------- PROGRAM LENGTH SETTINGS ----------------
+function renderProgramSettings() {
+  const content = document.getElementById('content');
+  const weeks = currentUser.user_metadata?.program_weeks;
+  const start = currentUser.user_metadata?.program_start_date;
+
+  // If already set, prefill "which week am I on" with the currently-computed week (not necessarily 1).
+  let currentWeek = 1;
+  if (weeks && start) {
+    const startDate = new Date(start + 'T00:00:00');
+    const today = new Date(todayISO() + 'T00:00:00');
+    currentWeek = Math.max(1, Math.floor((today - startDate) / 86400000 / 7) + 1);
+  }
+
+  content.innerHTML = `
+    <div class="section-title"><h4>دوره‌ی برنامه</h4><button class="btn-ghost" id="backToToday">بازگشت</button></div>
+    <div class="builder">
+      <p style="color:var(--text-dim); font-size:13px; margin:0 0 4px">اینجا تعیین می‌کنی برنامه‌ات چند هفته‌ست، تا بالای صفحه همیشه بدونی الان هفته‌ی چندمی — دیگه لازم نیست جایی یادداشتش کنی.</p>
+      <div class="field"><label>این برنامه چند هفته‌ست؟</label><input class="input" id="pw_weeks" type="number" placeholder="مثلاً 12" value="${weeks ?? ''}" /></div>
+      <div class="field"><label>الان تو کدوم هفته‌ای؟ (اگه تازه شروع کردی بذار ۱)</label><input class="input" id="pw_start" type="number" placeholder="مثلاً 1" value="${weeks ? currentWeek : ''}" /></div>
+      <button class="btn-primary" id="saveProgram" style="margin-top:8px">ذخیره</button>
+      ${weeks ? `<button class="btn-ghost" id="deleteProgram" style="color:var(--danger)">🗑 حذف دوره</button>` : ''}
+    </div>
+  `;
+
+  document.getElementById('backToToday').onclick = () => loadToday();
+  enableEnterNav(document.querySelector('.builder'), document.getElementById('saveProgram'));
+
+  document.getElementById('saveProgram').onclick = async () => {
+    const w = parseInt(document.getElementById('pw_weeks').value);
+    const sw = parseInt(document.getElementById('pw_start').value) || 1;
+    if (!w || w < 1) { toast('تعداد هفته رو درست وارد کن'); return; }
+
+    // Back-calculate an effective start date so "today" lands on week `sw`.
+    const startDate = new Date(todayISO() + 'T00:00:00');
+    startDate.setDate(startDate.getDate() - (sw - 1) * 7);
+    const startISO = startDate.toISOString().slice(0, 10);
+
+    await supabase.auth.updateUser({ data: { program_weeks: w, program_start_date: startISO } });
+    toast('دوره‌ی برنامه ذخیره شد ✅');
+    renderApp();
+  };
+
+  const deleteBtn = document.getElementById('deleteProgram');
+  if (deleteBtn) deleteBtn.onclick = async () => {
+    await supabase.auth.updateUser({ data: { program_weeks: null, program_start_date: null } });
+    toast('دوره‌ی برنامه حذف شد');
+    renderApp();
   };
 }
 
@@ -831,20 +915,13 @@ function renderTemplateEditor(template, weekday) {
     const idx = exerciseRowCount++;
     rowsEl.insertAdjacentHTML('beforeend', exerciseRowHTML(idx));
     const row = rowsEl.querySelector(`[data-row="${idx}"]`);
-    row.dataset.linked = 'false';
     if (prefill) {
       row.querySelector('[data-f="name"]').value = prefill.name ?? '';
       row.querySelector('[data-f="sets"]').value = prefill.sets ?? '';
       row.querySelector('[data-f="reps"]').value = prefill.reps ?? '';
       row.querySelector('[data-f="weight_kg"]').value = prefill.weight_kg ?? '';
     }
-    row.querySelector(`[data-remove="${idx}"]`).onclick = (e) => { e.target.closest('.ex-row').remove(); };
-    row.querySelector(`[data-link="${idx}"]`).onclick = (e) => {
-      const linked = row.dataset.linked === 'true';
-      row.dataset.linked = linked ? 'false' : 'true';
-      e.target.classList.toggle('active', !linked);
-      row.classList.toggle('linked', !linked);
-    };
+    wireExerciseRow(row, idx, rowsEl);
     return row;
   };
   document.getElementById('addRow').onclick = () => addRow();
