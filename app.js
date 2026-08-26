@@ -12,6 +12,14 @@ let timerInterval = null;
 const toFaDigits = (n) => String(n).replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
+// Rough MET (metabolic equivalent) value for resistance training, based on the free-text "level" field.
+function metForLevel(levelText) {
+  const t = (levelText || '').trim();
+  if (t.includes('سبک') || t.includes('مبتدی') || t.includes('easy') || t.includes('راحت')) return 3.5;
+  if (t.includes('سنگین') || t.includes('سخت') || t.includes('حرفه') || t.includes('شدید')) return 6.5;
+  return 5.0; // متوسط یا هر چیز مشخص‌نشده
+}
+
 // index = JS Date.getDay() (0 = Sunday ... 6 = Saturday)
 const WEEKDAYS = ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه'];
 // display order starting from Saturday (Persian week start)
@@ -248,6 +256,7 @@ function openProfileSheet(name) {
       <div class="profile-row" id="rowEditName">✏️ ویرایش نام</div>
       <div class="profile-row" id="rowTemplates">🗂 قالب‌های هفتگی</div>
       <div class="profile-row" id="rowProgram">📅 دوره‌ی برنامه</div>
+      <div class="profile-row" id="rowWeight">⚖️ وزن بدن</div>
       <div class="profile-row" id="rowLogout">⎋ خروج از حساب</div>
       <div class="profile-row danger" id="rowDelete">🗑 حذف حساب</div>
       <div class="profile-row" id="rowClose" style="color:var(--text-dim); justify-content:center">بستن</div>
@@ -314,6 +323,17 @@ function openProfileSheet(name) {
   document.getElementById('rowProgram').onclick = () => {
     closeProfileSheet();
     renderProgramSettings();
+  };
+
+  document.getElementById('rowWeight').onclick = async () => {
+    const current = currentUser.user_metadata?.body_weight;
+    const val = prompt('وزن بدنت رو به کیلوگرم وارد کن (برای محاسبه‌ی خودکار کالری):', current ?? '');
+    if (val === null) return;
+    const num = parseFloat(val);
+    if (!num || num <= 0) { toast('وزن معتبر وارد کن'); return; }
+    await supabase.auth.updateUser({ data: { body_weight: num } });
+    currentUser.user_metadata.body_weight = num;
+    toast('وزن بدن ذخیره شد ✅');
   };
 
   document.getElementById('rowDelete').onclick = async () => {
@@ -442,7 +462,6 @@ function renderToday(w) {
     </div>
 
     <div class="stats-row">
-      <div class="stat" data-field="avg_heart_rate">${ring(Math.min((w.avg_heart_rate||0)/2,100), 64, '#5DADE2', w.avg_heart_rate ? toFaDigits(w.avg_heart_rate) : '−')}<span class="label">ضربان میانگین</span></div>
       <div class="stat" data-field="active_minutes">${ring(Math.min((w.active_minutes||0),100), 64, 'var(--accent)', w.active_minutes ? toFaDigits(w.active_minutes) : '−')}<span class="label">دقیقه فعال</span></div>
       <div class="stat" data-field="calories">${ring(Math.min((w.calories||0)/5,100), 64, 'var(--danger)', w.calories ? toFaDigits(w.calories) : '−')}<span class="label">کالری</span></div>
     </div>
@@ -506,7 +525,7 @@ function renderToday(w) {
   content.querySelectorAll('.stat').forEach(el => {
     el.onclick = async () => {
       const field = el.dataset.field;
-      const labelMap = { avg_heart_rate: 'ضربان قلب میانگین', active_minutes: 'دقیقه فعال', calories: 'کالری سوزانده‌شده' };
+      const labelMap = { active_minutes: 'دقیقه فعال', calories: 'کالری سوزانده‌شده' };
       const val = prompt(`${labelMap[field]} رو وارد کن:`);
       if (val === null || val === '' || isNaN(val)) return;
       await supabase.from('workouts').update({ [field]: parseInt(val) }).eq('id', w.id);
@@ -528,8 +547,16 @@ function renderToday(w) {
   if (finishBtn) finishBtn.onclick = async () => {
     clearInterval(timerInterval);
     const elapsedMin = Math.max(1, Math.round((Date.now() - new Date(w.started_at).getTime()) / 60000));
-    await supabase.from('workouts').update({ finished_at: new Date().toISOString(), duration_min: elapsedMin }).eq('id', w.id);
-    toast('تمرین امروز به پایان رسید 💪');
+    const updates = { finished_at: new Date().toISOString(), duration_min: elapsedMin, active_minutes: elapsedMin };
+
+    const bodyWeight = currentUser.user_metadata?.body_weight;
+    if (bodyWeight) {
+      const met = metForLevel(w.level);
+      updates.calories = Math.round(met * bodyWeight * (elapsedMin / 60));
+    }
+
+    await supabase.from('workouts').update(updates).eq('id', w.id);
+    toast(bodyWeight ? 'تمرین امروز به پایان رسید 💪' : 'تمرین تموم شد — برای محاسبه‌ی خودکار کالری، وزن بدنتو تو پروفایل بزن');
     loadToday();
   };
 
@@ -729,7 +756,6 @@ function renderHistoryDetail(w) {
       </div>
     </div>
     <div class="stats-row">
-      <div class="stat">${ring(Math.min((w.avg_heart_rate || 0) / 2, 100), 64, '#5DADE2', w.avg_heart_rate ? toFaDigits(w.avg_heart_rate) : '−')}<span class="label">ضربان میانگین</span></div>
       <div class="stat">${ring(Math.min((w.active_minutes || 0), 100), 64, 'var(--accent)', w.active_minutes ? toFaDigits(w.active_minutes) : '−')}<span class="label">دقیقه فعال</span></div>
       <div class="stat">${ring(Math.min((w.calories || 0) / 5, 100), 64, 'var(--danger)', w.calories ? toFaDigits(w.calories) : '−')}<span class="label">کالری</span></div>
     </div>
