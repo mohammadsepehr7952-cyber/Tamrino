@@ -17,6 +17,14 @@ const WEEKDAYS = ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارش
 // display order starting from Saturday (Persian week start)
 const PERSIAN_WEEK_ORDER = [6, 0, 1, 2, 3, 4, 5];
 
+// Renders the avatar as an uploaded photo if the user has one, otherwise their initial letter.
+function avatarHTML(user, name, extraClass = '', id = '') {
+  const url = user?.user_metadata?.avatar_url;
+  const idAttr = id ? `id="${id}"` : '';
+  if (url) return `<img src="${url}" ${idAttr} class="avatar ${extraClass}" alt="${name}" />`;
+  return `<div ${idAttr} class="avatar ${extraClass}">${name[0]?.toUpperCase() ?? '🙂'}</div>`;
+}
+
 function toast(msg) {
   const el = document.createElement('div');
   el.className = 'toast';
@@ -147,7 +155,7 @@ async function renderApp() {
 
   app.innerHTML = `
     <div class="top-bar">
-      <div class="avatar avatar-sm" id="avatarBtn" title="پروفایل">${name[0]?.toUpperCase() ?? '🙂'}</div>
+      ${avatarHTML(user, name, 'avatar-sm', 'avatarBtn')}
       <img src="logo.png" alt="Tamrino" class="top-bar-logo" />
       <button class="icon-btn" id="historyBtn" title="تاریخچه">🕘</button>
     </div>
@@ -189,6 +197,40 @@ function closeProfileSheet() {
   document.getElementById('profileOverlay')?.remove();
 }
 
+function openAvatarViewer(url) {
+  const viewer = document.createElement('div');
+  viewer.className = 'avatar-viewer';
+  viewer.innerHTML = `<img src="${url}" alt="عکس پروفایل" />`;
+  viewer.onclick = () => viewer.remove();
+  document.body.appendChild(viewer);
+}
+
+// Resizes/compresses an image file client-side (fixes mobile-camera photos that are far too large to upload).
+function compressImage(file, maxDim = 600, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('فایل خونده نشد'));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('فرمت این عکس پشتیبانی نمیشه (مثلاً HEIC آیفون) — یه عکس JPG/PNG امتحان کن'));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxDim) { height = Math.round(height * maxDim / width); width = maxDim; }
+        else if (height >= width && height > maxDim) { width = Math.round(width * maxDim / height); height = maxDim; }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob); else reject(new Error('تبدیل عکس ناموفق بود'));
+        }, 'image/jpeg', quality);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function openProfileSheet(name) {
   closeProfileSheet();
   const overlay = document.createElement('div');
@@ -198,9 +240,11 @@ function openProfileSheet(name) {
     <div class="profile-sheet">
       <div class="sheet-handle"></div>
       <div class="profile-header">
-        <div class="avatar-lg">${name[0]?.toUpperCase() ?? '🙂'}</div>
+        ${avatarHTML(currentUser, name, 'avatar-lg', 'avatarLgImg')}
         <h3 style="margin:0">${name}</h3>
+        <input type="file" id="avatarFileInput" accept="image/*" style="display:none" />
       </div>
+      <div class="profile-row" id="rowChangePhoto">🖼 تغییر عکس پروفایل</div>
       <div class="profile-row" id="rowEditName">✏️ ویرایش نام</div>
       <div class="profile-row" id="rowTemplates">🗂 قالب‌های هفتگی</div>
       <div class="profile-row" id="rowProgram">📅 دوره‌ی برنامه</div>
@@ -212,6 +256,42 @@ function openProfileSheet(name) {
   document.body.appendChild(overlay);
 
   document.getElementById('rowClose').onclick = closeProfileSheet;
+
+  if (currentUser.user_metadata?.avatar_url) {
+    document.getElementById('avatarLgImg').onclick = () => openAvatarViewer(currentUser.user_metadata.avatar_url);
+  }
+
+  document.getElementById('rowChangePhoto').onclick = () => {
+    document.getElementById('avatarFileInput').click();
+  };
+
+  document.getElementById('avatarFileInput').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) { toast('این فایل خیلی بزرگه، یه عکس دیگه انتخاب کن'); return; }
+
+    toast('در حال آماده‌سازی عکس...');
+    let blob;
+    try {
+      blob = await compressImage(file);
+    } catch (err) {
+      toast('خطا در خوندن عکس: ' + err.message);
+      return;
+    }
+
+    toast('در حال آپلود...');
+    const path = `${currentUser.id}/avatar.jpg`;
+    const { error: uploadError } = await supabase.storage.from('avatars').upload(path, blob, { upsert: true, cacheControl: '3600', contentType: 'image/jpeg' });
+    if (uploadError) { toast('خطا در آپلود: ' + uploadError.message); return; }
+
+    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+    const publicUrl = data.publicUrl + '?t=' + Date.now();
+    await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
+
+    toast('عکس پروفایل به‌روزرسانی شد ✅');
+    closeProfileSheet();
+    renderApp();
+  };
 
   document.getElementById('rowEditName').onclick = async () => {
     const newName = prompt('اسم جدید رو وارد کن:', name);

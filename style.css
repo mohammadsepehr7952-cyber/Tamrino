@@ -164,6 +164,8 @@ button {
   background: var(--danger);
   display: flex; align-items: center; justify-content: center;
   font-weight: 700;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 .avatar.avatar-sm {
   width: 34px; height: 34px; font-size: 13px; cursor: pointer;
@@ -331,6 +333,19 @@ button {
   display: flex; align-items: center; justify-content: center;
   font-size: 24px; font-weight: 700;
 }
+img.avatar-lg { cursor: pointer; }
+
+.avatar-viewer {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.9);
+  display: flex; align-items: center; justify-content: center;
+  animation: fade-in 150ms ease;
+}
+.avatar-viewer img {
+  width: 85vw; max-width: 420px; height: 85vw; max-height: 420px;
+  border-radius: 50%; object-fit: cover;
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 .profile-row {
   display: flex; align-items: center; gap: 12px;
   padding: 16px 4px; border-bottom: 1px solid var(--border);
