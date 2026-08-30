@@ -1,7 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // ---- Supabase config (Barbod_gym project) ----
-const SUPABASE_URL = 'https://akragiujygurdhyqwxof.supabase.co';
+// Requests go through a Cloudflare Worker proxy on our own domain (db.tamrino44.ir)
+// instead of hitting supabase.co directly, since that domain is unreliable from Iran.
+const SUPABASE_URL = 'https://db.tamrino44.ir';
 const SUPABASE_ANON_KEY = 'sb_publishable_JQHdwikpM4U9GQhiTQrs-Q_y07l-jFA';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -84,42 +86,95 @@ function renderAuth(mode = 'signin') {
     <div class="auth-screen">
       <div class="auth-brand">
         <img src="logo.png" alt="Tamrino" class="brand-logo-img" />
-        <p>برنامه تمرینت، دیگه رو کاغذ نه</p>
       </div>
-      <div class="auth-card">
-        <div class="field">
-          <label>ایمیل</label>
-          <input class="input" id="email" type="email" placeholder="you@example.com" />
+
+      <div class="login-card">
+        <div class="card-bg" id="cardBg"></div>
+
+        <div class="hero hero-register" id="heroRegister">
+          <h2>خوش برگشتی</h2>
+          <p>برنامه تمرینت منتظرته</p>
+          <button type="button" class="hero-btn" id="ctaLogin">ورود</button>
         </div>
-        <div class="field">
-          <label>رمز عبور</label>
-          <input class="input" id="password" type="password" placeholder="••••••••" />
+        <div class="hero hero-login" id="heroLogin">
+          <h2>بزن بریم</h2>
+          <p>یه حساب بساز و پیشرفتتو دنبال کن</p>
+          <button type="button" class="hero-btn" id="ctaRegister">ثبت‌نام</button>
         </div>
-        <p class="error-text" id="authError"></p>
-        <button class="btn-primary" id="authSubmit">${mode === 'signin' ? 'ورود' : 'ساخت حساب'}</button>
-      </div>
-      <div class="auth-toggle">
-        <span>${mode === 'signin' ? 'حساب نداری؟' : 'قبلاً ثبت‌نام کردی؟'}</span>
-        <button class="btn-ghost" id="authToggle">${mode === 'signin' ? 'ثبت‌نام کن' : 'وارد شو'}</button>
+
+        <div class="auth-form auth-form-login" id="formLogin">
+          <h3>ورود</h3>
+          <div class="field">
+            <label>ایمیل</label>
+            <input class="input" id="email-signin" type="email" placeholder="you@example.com" />
+          </div>
+          <div class="field">
+            <label>رمز عبور</label>
+            <input class="input" id="password-signin" type="password" placeholder="••••••••" />
+          </div>
+          <p class="error-text" id="authError-signin"></p>
+          <button class="btn-primary" id="authSubmit-signin">ورود</button>
+        </div>
+
+        <div class="auth-form auth-form-register" id="formRegister">
+          <h3>ساخت حساب</h3>
+          <div class="field">
+            <label>ایمیل</label>
+            <input class="input" id="email-signup" type="email" placeholder="you@example.com" />
+          </div>
+          <div class="field">
+            <label>رمز عبور</label>
+            <input class="input" id="password-signup" type="password" placeholder="••••••••" />
+          </div>
+          <p class="error-text" id="authError-signup"></p>
+          <button class="btn-primary" id="authSubmit-signup">ساخت حساب</button>
+        </div>
       </div>
     </div>`;
 
-  document.getElementById('authToggle').onclick = () => renderAuth(mode === 'signin' ? 'signup' : 'signin');
-  enableEnterNav(document.querySelector('.auth-card'), document.getElementById('authSubmit'));
+  const cardBg = document.getElementById('cardBg');
+  const heroLogin = document.getElementById('heroLogin');
+  const heroRegister = document.getElementById('heroRegister');
+  const formLogin = document.getElementById('formLogin');
+  const formRegister = document.getElementById('formRegister');
 
-  document.getElementById('authSubmit').onclick = async () => {
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
-    const errEl = document.getElementById('authError');
+  const setMode = (m) => {
+    const isLogin = m === 'signin';
+    cardBg.classList.toggle('is-login', isLogin);
+    heroLogin.classList.toggle('is-active', isLogin);
+    heroRegister.classList.toggle('is-active', !isLogin);
+    formLogin.classList.toggle('is-active', isLogin);
+    formRegister.classList.toggle('is-active', !isLogin);
+  };
+  setMode(mode);
+
+  document.getElementById('ctaRegister').onclick = () => setMode('signup');
+  document.getElementById('ctaLogin').onclick = () => setMode('signin');
+
+  enableEnterNav(formLogin, document.getElementById('authSubmit-signin'));
+  enableEnterNav(formRegister, document.getElementById('authSubmit-signup'));
+
+  document.getElementById('authSubmit-signin').onclick = async () => {
+    const email = document.getElementById('email-signin').value.trim();
+    const password = document.getElementById('password-signin').value;
+    const errEl = document.getElementById('authError-signin');
     errEl.textContent = '';
     if (!email || !password) { errEl.textContent = 'ایمیل و رمز رو وارد کن'; return; }
 
-    const { error } = mode === 'signin'
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) errEl.textContent = error.message;
+  };
 
+  document.getElementById('authSubmit-signup').onclick = async () => {
+    const email = document.getElementById('email-signup').value.trim();
+    const password = document.getElementById('password-signup').value;
+    const errEl = document.getElementById('authError-signup');
+    errEl.textContent = '';
+    if (!email || !password) { errEl.textContent = 'ایمیل و رمز رو وارد کن'; return; }
+
+    const { error } = await supabase.auth.signUp({ email, password });
     if (error) { errEl.textContent = error.message; return; }
-    if (mode === 'signup') toast('ثبت‌نام شد! اگه تایید ایمیل فعاله، ایمیلتو چک کن.');
+    toast('ثبت‌نام شد! اگه تایید ایمیل فعاله، ایمیلتو چک کن.');
   };
 }
 
@@ -503,6 +558,7 @@ function renderToday(w) {
     ${w.started_at && !w.finished_at ? `
       <div class="timer-bar">
         <span class="time mono" id="timerDisplay">۰۰:۰۰</span>
+        <button class="btn-ghost reset-timer-btn" id="resetTimerBtn" title="اگه اشتباهی شروع تمرین رو زدی، اینجا بزن">↺ ریست تایمر</button>
         <button class="finish-btn" id="finishBtn">پایان تمرین</button>
       </div>` : ''}
   `;
@@ -560,6 +616,14 @@ function renderToday(w) {
     loadToday();
   };
 
+  const resetTimerBtn = document.getElementById('resetTimerBtn');
+  if (resetTimerBtn) resetTimerBtn.onclick = async () => {
+    if (!confirm('تایمر از همین الان از صفر شروع بشه؟ (برای وقتی که اشتباهی «شروع تمرین» زده شده)')) return;
+    await supabase.from('workouts').update({ started_at: new Date().toISOString() }).eq('id', w.id);
+    toast('تایمر ریست شد ↺');
+    loadToday();
+  };
+
   const undoFinishBtn = document.getElementById('undoFinishBtn');
   if (undoFinishBtn) undoFinishBtn.onclick = async () => {
     await supabase.from('workouts').update({ finished_at: null }).eq('id', w.id);
@@ -586,6 +650,7 @@ let exerciseRowCount = 0;
 function exerciseRowHTML(idx) {
   return `
     <div class="ex-row" data-row="${idx}">
+      <button class="select-btn" data-select="${idx}" title="اینو انتخاب کن تا حرکت بعدی دقیقاً بعد از این اضافه بشه">⊙</button>
       <input class="input" placeholder="اسم حرکت" data-f="name" />
       <input class="input" placeholder="ست" type="number" data-f="sets" />
       <input class="input" placeholder="تکرار" type="number" data-f="reps" />
@@ -599,9 +664,29 @@ function exerciseRowHTML(idx) {
     </div>`;
 }
 
-// Shared wiring for remove / link-to-next / reorder buttons on an exercise row.
+// Inserts a new exercise row right after the currently-selected row (if any),
+// otherwise appends it to the end of the list — same insertion point logic
+// used by the daily builder, the edit-workout screen, and the template editor.
+function insertExerciseRow(rowsEl, idx) {
+  const selected = rowsEl.querySelector('.ex-row.selected');
+  if (selected) {
+    selected.insertAdjacentHTML('afterend', exerciseRowHTML(idx));
+    selected.classList.remove('selected');
+  } else {
+    rowsEl.insertAdjacentHTML('beforeend', exerciseRowHTML(idx));
+  }
+  return rowsEl.querySelector(`[data-row="${idx}"]`);
+}
+
+// Shared wiring for remove / link-to-next / reorder / select buttons on an exercise row.
 function wireExerciseRow(row, idx, rowsEl) {
   if (row.dataset.linked === undefined) row.dataset.linked = 'false';
+  row.querySelector(`[data-select="${idx}"]`).onclick = (e) => {
+    e.preventDefault();
+    const alreadySelected = row.classList.contains('selected');
+    rowsEl.querySelectorAll('.ex-row.selected').forEach(r => r.classList.remove('selected'));
+    if (!alreadySelected) row.classList.add('selected');
+  };
   row.querySelector(`[data-remove="${idx}"]`).onclick = (e) => {
     e.target.closest('.ex-row').remove();
   };
@@ -649,8 +734,7 @@ function renderBuilder(weekday) {
   document.getElementById('goTemplates')?.addEventListener('click', () => renderTemplateEditor(null, weekday));
   const addRow = () => {
     const idx = exerciseRowCount++;
-    rowsEl.insertAdjacentHTML('beforeend', exerciseRowHTML(idx));
-    const row = rowsEl.querySelector(`[data-row="${idx}"]`);
+    const row = insertExerciseRow(rowsEl, idx);
     wireExerciseRow(row, idx, rowsEl);
   };
   document.getElementById('addRow').onclick = addRow;
@@ -827,8 +911,7 @@ function renderEditWorkout(w) {
 
   const addRow = (prefill) => {
     const idx = exerciseRowCount++;
-    rowsEl.insertAdjacentHTML('beforeend', exerciseRowHTML(idx));
-    const row = rowsEl.querySelector(`[data-row="${idx}"]`);
+    const row = insertExerciseRow(rowsEl, idx);
     if (prefill) {
       row.querySelector('[data-f="name"]').value = prefill.name ?? '';
       row.querySelector('[data-f="sets"]').value = prefill.sets ?? '';
@@ -1019,8 +1102,7 @@ function renderTemplateEditor(template, weekday) {
 
   const addRow = (prefill) => {
     const idx = exerciseRowCount++;
-    rowsEl.insertAdjacentHTML('beforeend', exerciseRowHTML(idx));
-    const row = rowsEl.querySelector(`[data-row="${idx}"]`);
+    const row = insertExerciseRow(rowsEl, idx);
     if (prefill) {
       row.querySelector('[data-f="name"]').value = prefill.name ?? '';
       row.querySelector('[data-f="sets"]').value = prefill.sets ?? '';
