@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تمرینو | آفلاین</title>
+<style>
+  @font-face {
+    font-family: 'Vazirmatn';
+    src: url('https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/fonts/webfonts/Vazirmatn-Medium.woff2') format('woff2');
+    font-weight: 500;
+  }
+  @font-face {
+    font-family: 'Vazirmatn';
+    src: url('https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/fonts/webfonts/Vazirmatn-ExtraBold.woff2') format('woff2');
+    font-weight: 800;
+  }
+
+  :root {
+    --bg: #121214;
+    --card: #1b1b1e;
+    --iron: #2b2b30;
+    --steel: #6c6c74;
+    --chalk: #e9e6dd;
+    --power: #ff5a36;
+    --power-dim: #7a2c1c;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse at 50% -10%, #1f1f23 0%, var(--bg) 55%);
+    color: var(--chalk);
+    font-family: 'Vazirmatn', sans-serif;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  .wrap {
+    width: 100%;
+    max-width: 420px;
+    text-align: center;
+    opacity: 0;
+    transform: translateY(10px);
+    animation: rise 0.7s ease-out forwards;
+  }
+
+  @keyframes rise {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .stage {
+    width: 220px;
+    height: 220px;
+    margin: 0 auto 8px;
+  }
+
+  h1 {
+    font-weight: 800;
+    font-size: 1.5rem;
+    line-height: 1.5;
+    margin: 12px 0 8px;
+    color: var(--chalk);
+  }
+
+  p {
+    font-weight: 500;
+    font-size: 0.95rem;
+    line-height: 1.9;
+    color: var(--steel);
+    margin: 0 0 28px;
+    max-width: 320px;
+    margin-inline: auto;
+  }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--steel);
+    margin-bottom: 22px;
+  }
+
+  .status .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--power);
+  }
+
+  button {
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: var(--bg);
+    background: var(--power);
+    border: none;
+    border-radius: 10px;
+    padding: 14px 36px;
+    cursor: pointer;
+    letter-spacing: 0.2px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    box-shadow: 0 8px 22px -8px var(--power-dim);
+  }
+
+  button:hover, button:focus-visible {
+    background: #ff6b48;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 26px -6px var(--power-dim);
+  }
+
+  button:active {
+    transform: translateY(1px) scale(0.98);
+  }
+
+  button:focus-visible {
+    outline: 2px solid var(--chalk);
+    outline-offset: 3px;
+  }
+
+  .hint {
+    margin-top: 16px;
+    font-size: 0.78rem;
+    color: #4d4d54;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wrap { animation: none; opacity: 1; transform: none; }
+    button { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="stage">
+    <svg viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="بارفیکس با اتصال قطع‌شده">
+      <!-- left plate -->
+      <rect x="20" y="70" width="26" height="80" rx="6" fill="#2b2b30" stroke="#3d3d43" stroke-width="2"/>
+      <rect x="30" y="85" width="10" height="50" rx="3" fill="#1b1b1e"/>
+      <!-- bar left segment -->
+      <rect x="46" y="104" width="42" height="12" rx="3" fill="#3d3d43"/>
+      <!-- broken gap with jagged ends -->
+      <path d="M88 104 L96 104 L100 100 L104 112 L108 98 L112 116 L118 104 L126 104 L126 116 L118 116 L112 128 L108 100 L104 118 L100 108 L96 116 L88 116 Z" fill="#3d3d43"/>
+      <!-- bar right segment -->
+      <rect x="126" y="104" width="42" height="12" rx="3" fill="#3d3d43"/>
+      <!-- right plate -->
+      <rect x="168" y="70" width="26" height="80" rx="6" fill="#2b2b30" stroke="#3d3d43" stroke-width="2"/>
+      <rect x="174" y="85" width="10" height="50" rx="3" fill="#1b1b1e"/>
+
+      <!-- no-signal glyph floating above the break -->
+      <g transform="translate(107,60)">
+        <path d="M-16 8 C-16 -6 16 -6 16 8" fill="none" stroke="#6c6c74" stroke-width="4" stroke-linecap="round" opacity="0.55"/>
+        <path d="M-9 12 C-9 3 9 3 9 12" fill="none" stroke="#6c6c74" stroke-width="4" stroke-linecap="round" opacity="0.75"/>
+        <circle cx="0" cy="18" r="3.2" fill="#ff5a36"/>
+        <line x1="-19" y1="-10" x2="19" y2="24" stroke="#ff5a36" stroke-width="4" stroke-linecap="round"/>
+      </g>
+
+      <!-- sweat drop for character -->
+      <path d="M182 52 C182 58 176 62 176 55 C176 50 182 44 182 52 Z" fill="#3d3d43" opacity="0.6"/>
+    </svg>
+  </div>
+
+  <h1>اینترنت رفت زیر پرس!</h1>
+  <p>یه نفس عمیق بکش و ریکاوری کن؛ به محض وصل شدن اینترنت، تمرینو خودش برمی‌گرده رو فرم.</p>
+
+  <div class="status"><span class="dot"></span>در حال پایش اتصال…</div>
+  <br>
+  <button onclick="location.reload()">دوباره امتحان کن</button>
+
+  <div class="hint">تمرین‌های ذخیره‌شده همچنان روی گوشیت در امانن.</div>
+</div>
+
+<script>
+  // Auto-retry the moment the connection comes back, no need to tap the button.
+  window.addEventListener('online', () => location.reload());
+</script>
+
+</body>
+</html>
